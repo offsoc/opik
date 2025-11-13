@@ -137,14 +137,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         {
             "prompts": [
                 {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
+                    "prompt": [
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": "Explain quantum computing in simple terms."}
+                    ],
+                    "improvement_focus": "clarity",
+                    "reasoning": "Adds explicit system guidance and clarifies the user request."
                 },
                 {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
+                    "prompt": [
+                        {"role": "user", "content": [
+                            {"type": "text", "text": "Describe what you see."},
+                            {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}}
+                        ]}
+                    ],
+                    "improvement_focus": "multimodal support",
+                    "reasoning": "Provides a combined text description and reference image."
                 }
             ]
         }"""
@@ -951,7 +959,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call["optimizer_name"] = self.__class__.__name__
                 metadata_for_call["opik_call_type"] = "optimization_algorithm"
 
-                response = self._call_model(
+                response: CandidatePromptsResponse = self._call_model(
                     messages=[
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
@@ -969,21 +977,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                         )
                         continue
 
-                    if current_prompt.user:
-                        user_text = current_prompt.user
-                    else:
-                        if current_prompt.messages is not None:
-                            content = current_prompt.messages[-1]["content"]
-                            user_text = (
-                                content if isinstance(content, str) else str(content)
-                            )
-                        else:
-                            raise Exception("User content not found in chat-prompt!")
-
                     valid_prompts.append(
                         chat_prompt.ChatPrompt(
-                            system=candidate.prompt[0]["content"],
-                            user=user_text,
+                            messages=candidate.prompt,
                             tools=current_prompt.tools,
                             function_map=current_prompt.function_map,
                         )

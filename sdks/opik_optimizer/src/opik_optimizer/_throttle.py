@@ -3,9 +3,11 @@ import pyrate_limiter
 import time
 import opik.config
 
-from typing import Any
+from typing import Any, Callable, ParamSpec, TypeVar
 from collections.abc import Callable
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
 class RateLimiter:
     """
@@ -23,18 +25,13 @@ class RateLimiter:
         while not self.limiter.try_acquire(self.bucket_key):
             time.sleep(0.01)
 
-
-def rate_limited(limiter: RateLimiter) -> Callable[[Callable], Callable]:
-    """Decorator to rate limit a function using the provided limiter"""
-
-    def decorator(func: Callable) -> Callable:
+def rate_limited(limiter: RateLimiter) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             limiter.acquire()
             return func(*args, **kwargs)
-
         return wrapper
-
     return decorator
 
 
