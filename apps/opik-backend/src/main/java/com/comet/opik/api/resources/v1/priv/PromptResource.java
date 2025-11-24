@@ -11,6 +11,8 @@ import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.PromptFilter;
+import com.comet.opik.api.filter.PromptVersionFilter;
+import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
@@ -62,6 +64,7 @@ public class PromptResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PromptService promptService;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull FiltersFactory filtersFactory;
 
     @POST
@@ -225,18 +228,18 @@ public class PromptResource {
     @JsonView({PromptVersion.View.Public.class})
     public Response getPromptVersions(@PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Getting prompt versions by id '{}' on workspace_id '{}', page '{}', size '{}'", id, workspaceId, page,
-                size);
-
-        PromptVersionPage promptVersionPage = promptService.getVersionsByPromptId(id, page, size);
-
-        log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'", id, workspaceId,
-                promptVersionPage.size());
-
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Getting prompt versions by id '{}' on workspace_id '{}', page '{}', size '{}'",
+                id, workspaceId, page, size);
+        var sortingFields = sortingFactoryPromptVersions.newSorting(sorting);
+        var versionFilters = filtersFactory.newFilters(filters, PromptVersionFilter.LIST_TYPE_REFERENCE);
+        var promptVersionPage = promptService.getVersionsByPromptId(
+                id, page, size, sortingFields, versionFilters);
+        log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'",
+                id, workspaceId, promptVersionPage.size());
         return Response.ok(promptVersionPage).build();
     }
 

@@ -172,6 +172,24 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </>
           )}
 
+          {activeVersion?.tags && activeVersion.tags.length > 0 && (
+            <>
+              <p className="comet-body-s-accented mt-4 text-foreground">
+                Tags
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {activeVersion.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-md bg-primary-foreground px-2 py-1 text-xs font-medium text-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+
           {activeVersion?.change_description && (
             <>
               <p className="comet-body-s-accented mt-4 text-foreground">

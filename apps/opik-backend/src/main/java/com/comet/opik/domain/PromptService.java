@@ -64,7 +64,8 @@ public interface PromptService {
 
     List<Prompt> getByIds(Set<UUID> ids);
 
-    PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
+    PromptVersionPage getVersionsByPromptId(
+            UUID promptId, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     PromptVersion getVersionById(UUID id);
 
@@ -514,18 +515,26 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersionPage getVersionsByPromptId(@NonNull UUID promptId, int page, int size) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
+    public PromptVersionPage getVersionsByPromptId(
+            @NonNull UUID promptId,
+            int page,
+            int size,
+            @NonNull List<SortingField> sortingFields,
+            List<? extends Filter> filters) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
+        var filtersSQL = Optional.ofNullable(filters)
+                .flatMap(filter -> filterQueryBuilder.toAnalyticsDbFilters(filter, FilterStrategy.PROMPT_VERSION))
+                .orElse(null);
+        var filterMapping = Optional.ofNullable(filters)
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-            long total = promptVersionDAO.countByPromptId(promptId, workspaceId);
-
+            var promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            var total = promptVersionDAO.findCount(workspaceId, promptId, filtersSQL, filterMapping);
             var offset = (page - 1) * size;
-
-            List<PromptVersion> content = promptVersionDAO.findByPromptId(promptId, workspaceId, size, offset);
-
+            var content = promptVersionDAO.find(
+                    workspaceId, promptId, offset, size, sortingFieldsSql, filtersSQL, filterMapping);
             return PromptVersionPage.builder()
                     .page(page)
                     .size(content.size())

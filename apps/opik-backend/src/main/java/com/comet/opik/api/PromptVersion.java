@@ -41,6 +41,8 @@ public record PromptVersion(
                 PromptVersion.View.Detail.class}) PromptType type,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) @Nullable Set<String> tags,
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Set<String> variables,
         @JsonView({Prompt.View.Detail.class,

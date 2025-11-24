@@ -2814,4 +2814,89 @@ class PromptResourceTest {
         Assertions.assertThat(actual).isBetween(expected, now);
         return 0;
     }
+
+    @Nested
+    @DisplayName("Prompt Version Tags and Filtering Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionTagsAndFilteringTest {
+
+        @Test
+        @DisplayName("Success: create prompt version with tags")
+        void createPromptVersionWithTags() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var tags = Set.of("production", "v1.0", "stable");
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(promptId)
+                    .commit(null)
+                    .createdBy(USER)
+                    .variables(null)
+                    .tags(tags)
+                    .build();
+
+            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(createdVersion.tags()).isEqualTo(tags);
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by tags")
+        void filterPromptVersionsByTags() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("production", "stable"))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("development", "beta"))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by tag
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptFilter.builder()
+                            .field(PromptField.TAGS)
+                            .operator(Operator.CONTAINS)
+                            .value("production")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).tags()).contains("production");
+            }
+        }
+    }
 }

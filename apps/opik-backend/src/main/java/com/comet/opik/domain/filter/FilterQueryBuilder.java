@@ -12,6 +12,7 @@ import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.PromptField;
+import com.comet.opik.api.filter.PromptVersionField;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
@@ -106,6 +107,10 @@ public class FilterQueryBuilder {
     private static final String ENABLED_DB = "enabled";
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
+    private static final String PROMPT_ID_DB = "prompt_id";
+    private static final String COMMIT_DB = "commit";
+    private static final String TEMPLATE_DB = "template";
+    private static final String CHANGE_DESCRIPTION_DB = "change_description";
 
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
@@ -296,6 +301,19 @@ public class FilterQueryBuilder {
                     .put(PromptField.VERSION_COUNT, VERSION_COUNT_DB)
                     .build());
 
+    private static final Map<PromptVersionField, String> PROMPT_VERSION_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<PromptVersionField, String>builder()
+                    .put(PromptVersionField.ID, ID_DB)
+                    .put(PromptVersionField.PROMPT_ID, PROMPT_ID_DB)
+                    .put(PromptVersionField.COMMIT, COMMIT_DB)
+                    .put(PromptVersionField.TEMPLATE, TEMPLATE_DB)
+                    .put(PromptVersionField.CHANGE_DESCRIPTION, CHANGE_DESCRIPTION_DB)
+                    .put(PromptVersionField.TYPE, TYPE_DB)
+                    .put(PromptVersionField.TAGS, TAGS_DB)
+                    .put(PromptVersionField.CREATED_AT, CREATED_AT_DB)
+                    .put(PromptVersionField.CREATED_BY, CREATED_BY_DB)
+                    .build());
+
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<DatasetField, String>builder()
                     .put(DatasetField.ID, ID_DB)
@@ -471,6 +489,17 @@ public class FilterQueryBuilder {
                 PromptField.LAST_UPDATED_BY,
                 PromptField.TAGS,
                 PromptField.VERSION_COUNT));
+
+        map.put(FilterStrategy.PROMPT_VERSION, Set.of(
+                PromptVersionField.ID,
+                PromptVersionField.PROMPT_ID,
+                PromptVersionField.COMMIT,
+                PromptVersionField.TEMPLATE,
+                PromptVersionField.CHANGE_DESCRIPTION,
+                PromptVersionField.TYPE,
+                PromptVersionField.TAGS,
+                PromptVersionField.CREATED_AT,
+                PromptVersionField.CREATED_BY));
 
         map.put(FilterStrategy.DATASET, Set.of(
                 DatasetField.ID,
@@ -660,6 +689,7 @@ public class FilterQueryBuilder {
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
+            case PromptVersionField promptVersionField -> PROMPT_VERSION_FIELDS_MAP.get(promptVersionField);
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
             case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
             case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
