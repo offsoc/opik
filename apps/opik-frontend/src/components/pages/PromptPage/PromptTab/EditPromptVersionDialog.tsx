@@ -33,6 +33,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 
@@ -46,6 +47,7 @@ type EditPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   template: string;
   metadata?: object;
+  tags?: string[];
   promptName: string;
   onSetActiveVersionId: (versionId: string) => void;
 };
@@ -57,6 +59,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
   setOpen,
   template: promptTemplate,
   metadata: promptMetadata,
+  tags: promptTags = [],
   promptName,
   onSetActiveVersionId,
 }) => {
@@ -68,6 +71,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
     : "";
   const [template, setTemplate] = useState(promptTemplate);
   const [metadata, setMetadata] = useState(metadataString);
+  const [tags, setTags] = useState<string[]>(promptTags);
   const [changeDescription, setChangeDescription] = useState("");
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
@@ -94,6 +98,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
       template,
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
+      ...(tags.length > 0 && { tags }),
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
       },
@@ -104,8 +109,9 @@ const EditPromptVersionDialog: React.FunctionComponent<
 
   const templateHasChanges = template !== promptTemplate;
   const metadataHasChanges = metadata !== metadataString;
+  const tagsHaveChanges = !isEqual(tags, promptTags);
   const isValid =
-    template?.length && (templateHasChanges || metadataHasChanges);
+    template?.length && (templateHasChanges || metadataHasChanges || tagsHaveChanges);
 
   const originalText = promptTemplate;
   const { images: originalImages, videos: originalVideos } =
@@ -282,6 +288,17 @@ const EditPromptVersionDialog: React.FunctionComponent<
               id="promptMetadata"
               value={changeDescription}
               onChange={(e) => setChangeDescription(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="promptTags">Tags</Label>
+            <TagListRenderer
+              tags={tags}
+              onAddTag={(newTag) => setTags([...tags, newTag])}
+              onDeleteTag={(tagToDelete) =>
+                setTags(tags.filter((t) => t !== tagToDelete))
+              }
+              align="start"
             />
           </div>
           <div className="flex flex-col gap-2 border-t border-border pb-4">

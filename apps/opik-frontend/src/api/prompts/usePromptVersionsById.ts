@@ -1,12 +1,15 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROMPTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { PromptVersion } from "@/types/prompts";
+import { Sorting } from "@/types/sorting";
+import { processSorting } from "@/lib/sorting";
 
 type UsePromptVersionsByIdParams = {
   promptId: string;
   search?: string;
   page: number;
   size: number;
+  sorting?: Sorting;
 };
 
 type UsePromptsVersionsByIdResponse = {
@@ -16,13 +19,14 @@ type UsePromptsVersionsByIdResponse = {
 
 const getPromptVersionsById = async (
   { signal }: QueryFunctionContext,
-  { promptId, size, page, search }: UsePromptVersionsByIdParams,
+  { promptId, size, page, search, sorting }: UsePromptVersionsByIdParams,
 ) => {
   const { data } = await api.get(
     `${PROMPTS_REST_ENDPOINT}${promptId}/versions`,
     {
       signal,
       params: {
+        ...processSorting(sorting),
         ...(search && { name: search }),
         size,
         page,

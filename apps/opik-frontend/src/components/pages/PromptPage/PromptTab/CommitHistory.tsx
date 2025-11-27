@@ -8,6 +8,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { PromptVersion } from "@/types/prompts";
+import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 
 interface CommitHistoryProps {
   versions: PromptVersion[];
@@ -95,6 +96,13 @@ const CommitHistory = ({
               <p className="comet-body-s pl-6 text-light-slate">
                 {formatDate(version.created_at)}
               </p>
+              {version.tags && version.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pl-6">
+                  {version.tags.map((tag) => (
+                    <ColoredTag key={tag} label={tag} size="sm" />
+                  ))}
+                </div>
+              )}
             </li>
           );
         })}
