@@ -63,15 +63,16 @@ public record PromptVersion(
     @Builder
     public record PromptVersionPage(
             @JsonView( {
-                    PromptVersion.View.Public.class}) int page,
+                    PromptVersion.View.Public.class}) List<PromptVersion> content,
+            @JsonView({PromptVersion.View.Public.class}) int page,
             @JsonView({PromptVersion.View.Public.class}) int size,
             @JsonView({PromptVersion.View.Public.class}) long total,
-            @JsonView({PromptVersion.View.Public.class}) List<PromptVersion> content)
+            @JsonView({PromptVersion.View.Public.class}) List<String> sortableBy)
             implements
                 Page<PromptVersion>{
 
-        public static PromptVersion.PromptVersionPage empty(int page) {
-            return new PromptVersion.PromptVersionPage(page, 0, 0, List.of());
+        public static PromptVersion.PromptVersionPage empty(int page, List<String> sortableBy) {
+            return new PromptVersion.PromptVersionPage(List.of(), page, 0, 0, sortableBy);
         }
     }
 

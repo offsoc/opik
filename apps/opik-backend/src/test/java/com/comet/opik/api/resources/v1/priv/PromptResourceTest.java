@@ -2899,4 +2899,232 @@ class PromptResourceTest {
             }
         }
     }
+
+    @Nested
+    @DisplayName("Update Prompt Version Tags")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdatePromptVersionTagsTest {
+
+        @Test
+        @DisplayName("Success: update tags on existing prompt version")
+        void updateTagsOnExistingVersion() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("initial", "test"))
+                    .build();
+
+            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Update tags
+            var newTags = Set.of("updated", "production", "stable");
+            var updateRequest = Map.of("tags", newTags);
+
+            var target = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Verify tags were updated
+            var getTarget = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
+
+            try (var response = getTarget.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var updatedVersion = response.readEntity(PromptVersion.class);
+                assertThat(updatedVersion.tags()).isEqualTo(newTags);
+                assertThat(updatedVersion.id()).isEqualTo(createdVersion.id()); // Same version ID
+                assertThat(updatedVersion.template()).isEqualTo(createdVersion.template()); // Template unchanged
+            }
+        }
+
+        @Test
+        @DisplayName("Success: clear all tags by setting empty set")
+        void clearAllTags() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("tag1", "tag2", "tag3"))
+                    .build();
+
+            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Clear tags
+            var updateRequest = Map.of("tags", Set.of());
+
+            var target = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Verify tags were cleared
+            var getTarget = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
+
+            try (var response = getTarget.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var updatedVersion = response.readEntity(PromptVersion.class);
+                assertThat(updatedVersion.tags()).isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("Error: update tags on non-existent version returns 404")
+        void updateTagsOnNonExistentVersion() {
+            var nonExistentId = UUID.randomUUID();
+            var updateRequest = Map.of("tags", Set.of("test"));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(nonExistentId));
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: update tags with null tags returns 400")
+        void updateTagsWithNullTags() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("test"))
+                    .build();
+
+            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Try to update with null tags (invalid)
+            var updateRequest = Map.of("tags", (Object) null);
+
+            var target = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: tags update does not change other version fields")
+        void tagsUpdateDoesNotChangeOtherFields() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("original"))
+                    .build();
+
+            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Store original values
+            var originalTemplate = createdVersion.template();
+            var originalMetadata = createdVersion.metadata();
+            var originalCommit = createdVersion.commit();
+            var originalCreatedAt = createdVersion.createdAt();
+            var originalCreatedBy = createdVersion.createdBy();
+
+            // Update only tags
+            var newTags = Set.of("new", "tags");
+            var updateRequest = Map.of("tags", newTags);
+
+            var target = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Verify only tags changed, everything else stayed the same
+            var getTarget = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
+
+            try (var response = getTarget.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var updatedVersion = response.readEntity(PromptVersion.class);
+                assertThat(updatedVersion.tags()).isEqualTo(newTags);
+                assertThat(updatedVersion.template()).isEqualTo(originalTemplate);
+                assertThat(updatedVersion.metadata()).isEqualTo(originalMetadata);
+                assertThat(updatedVersion.commit()).isEqualTo(originalCommit);
+                assertThat(updatedVersion.createdAt()).isEqualTo(originalCreatedAt);
+                assertThat(updatedVersion.createdBy()).isEqualTo(originalCreatedBy);
+            }
+        }
+    }
 }

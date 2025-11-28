@@ -8,6 +8,7 @@ import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionRetrieve;
+import com.comet.opik.api.UpdatePromptVersionTags;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.PromptFilter;
@@ -35,6 +36,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -229,6 +231,7 @@ public class PromptResource {
     public Response getPromptVersions(@PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("commit") @Schema(description = "Filter versions by commit (partial match, case insensitive)") String commit,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -237,7 +240,7 @@ public class PromptResource {
         var sortingFields = sortingFactoryPromptVersions.newSorting(sorting);
         var versionFilters = filtersFactory.newFilters(filters, PromptVersionFilter.LIST_TYPE_REFERENCE);
         var promptVersionPage = promptService.getVersionsByPromptId(
-                id, page, size, sortingFields, versionFilters);
+                id, commit, page, size, sortingFields, versionFilters);
         log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'",
                 id, workspaceId, promptVersionPage.size());
         return Response.ok(promptVersionPage).build();
@@ -261,6 +264,28 @@ public class PromptResource {
         log.info("Got prompt version by id '{}' on workspace_id '{}'", id, workspaceId);
 
         return Response.ok(promptVersion).build();
+    }
+
+    @PATCH
+    @Path("/versions/{versionId}/tags")
+    @Operation(operationId = "updatePromptVersionTags", summary = "Update prompt version tags", description = "Update tags for a prompt version without creating a new version", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content - Tags updated successfully"),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    public Response updatePromptVersionTags(
+            @PathParam("versionId") UUID versionId,
+            @Valid UpdatePromptVersionTags request) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating tags for prompt version '{}' on workspace_id '{}'", versionId, workspaceId);
+
+        promptService.updateVersionTags(versionId, request.tags());
+
+        log.info("Updated tags for prompt version '{}' on workspace_id '{}'", versionId, workspaceId);
+
+        return Response.noContent().build();
     }
 
     @POST

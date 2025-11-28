@@ -63,8 +63,9 @@ interface PromptVersionDAO {
             WHERE workspace_id = :workspace_id
             <if(ids)> AND id IN (<ids>) <endif>
             <if(prompt_id)> AND prompt_id = :prompt_id <endif>
+            <if(commit)> AND commit like concat('%', :commit, '%') <endif>
             <if(filters)> AND <filters> <endif>
-            <if(sort_fields)> ORDER BY <sort_fields>, id DESC <endif>
+            ORDER BY <if(sort_fields)><sort_fields>, <endif>id DESC
             <if(limit)> LIMIT :limit OFFSET :offset <endif>
             """)
     @UseStringTemplateEngine
@@ -73,6 +74,7 @@ interface PromptVersionDAO {
             @Bind("workspace_id") String workspaceId,
             @Nullable @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Collection<UUID> ids,
             @Nullable @Bind("prompt_id") UUID promptId,
+            @Nullable @Define("commit") @Bind("commit") String commit,
             @Nullable @Bind("offset") Integer offset,
             @Nullable @Bind("limit") Integer limit,
             @Define("sort_fields") String sortingFields,
@@ -87,11 +89,11 @@ interface PromptVersionDAO {
             String sortingFields,
             String filters,
             Map<String, Object> filterMapping) {
-        return find(workspaceId, null, promptId, offset, limit, sortingFields, filters, filterMapping);
+        return find(workspaceId, null, promptId, null, offset, limit, sortingFields, filters, filterMapping);
     }
 
     default List<PromptVersion> findByIds(Collection<UUID> ids, String workspaceId) {
-        return find(workspaceId, ids, null, null, null, null, null, Map.of());
+        return find(workspaceId, ids, null, null, null, null, null, null, Map.of());
     }
 
     @SqlQuery("""
@@ -99,6 +101,7 @@ interface PromptVersionDAO {
             WHERE workspace_id = :workspace_id
             <if(ids)> AND id IN (<ids>) <endif>
             <if(prompt_id)> AND prompt_id = :prompt_id <endif>
+            <if(commit)> AND commit like concat('%', :commit, '%') <endif>
             <if(filters)> AND <filters> <endif>
             """)
     @UseStringTemplateEngine
@@ -107,6 +110,7 @@ interface PromptVersionDAO {
             @Bind("workspace_id") String workspaceId,
             @Nullable @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Collection<UUID> ids,
             @Nullable @Bind("prompt_id") UUID promptId,
+            @Nullable @Define("commit") @Bind("commit") String commit,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
@@ -115,12 +119,15 @@ interface PromptVersionDAO {
             UUID promptId,
             String filters,
             Map<String, Object> filterMapping) {
-        return findCount(workspaceId, null, promptId, filters, filterMapping);
+        return findCount(workspaceId, null, promptId, null, filters, filterMapping);
     }
 
     @SqlQuery("SELECT * FROM prompt_versions WHERE prompt_id = :prompt_id AND commit = :commit AND workspace_id = :workspace_id")
     PromptVersion findByCommit(@Bind("prompt_id") UUID promptId, @Bind("commit") String commit,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("UPDATE prompt_versions SET tags = :tags WHERE id = :id AND workspace_id = :workspace_id")
+    int updateTags(@Bind("id") UUID id, @Bind("tags") Set<String> tags, @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("DELETE FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     int deleteByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);

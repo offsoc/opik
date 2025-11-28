@@ -8,6 +8,7 @@ import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -65,9 +66,12 @@ public interface PromptService {
     List<Prompt> getByIds(Set<UUID> ids);
 
     PromptVersionPage getVersionsByPromptId(
-            UUID promptId, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
+            UUID promptId, String commit, int page, int size, List<SortingField> sortingFields,
+            List<? extends Filter> filters);
 
     PromptVersion getVersionById(UUID id);
+
+    void updateVersionTags(UUID versionId, Set<String> tags);
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
@@ -94,6 +98,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull EventBus eventBus;
 
     @Override
@@ -517,6 +522,7 @@ class PromptServiceImpl implements PromptService {
     @Override
     public PromptVersionPage getVersionsByPromptId(
             @NonNull UUID promptId,
+            String commit,
             int page,
             int size,
             @NonNull List<SortingField> sortingFields,
@@ -531,16 +537,16 @@ class PromptServiceImpl implements PromptService {
                 .orElse(Map.of());
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var promptVersionDAO = handle.attach(PromptVersionDAO.class);
-            var total = promptVersionDAO.findCount(workspaceId, promptId, filtersSQL, filterMapping);
+            var total = promptVersionDAO.findCount(workspaceId, null, promptId, commit, filtersSQL, filterMapping);
             var offset = (page - 1) * size;
             var content = promptVersionDAO.find(
-                    workspaceId, promptId, offset, size, sortingFieldsSql, filtersSQL, filterMapping);
-            return PromptVersionPage.builder()
-                    .page(page)
-                    .size(content.size())
-                    .content(content)
-                    .total(total)
-                    .build();
+                    workspaceId, null, promptId, commit, offset, size, sortingFieldsSql, filtersSQL, filterMapping);
+            return new PromptVersionPage(
+                    content,
+                    page,
+                    content.size(),
+                    total,
+                    sortingFactoryPromptVersions.getSortableFields());
         });
     }
 
@@ -548,6 +554,30 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion getVersionById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getVersionById(workspaceId, id);
+    }
+
+    @Override
+    public void updateVersionTags(@NonNull UUID versionId, Set<String> tags) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating tags for prompt version '{}' in workspace '{}'", versionId, workspaceId);
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            var promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            // Verify version exists in this workspace
+            var existingVersions = promptVersionDAO.findByIds(List.of(versionId), workspaceId);
+            if (existingVersions.isEmpty()) {
+                throw new NotFoundException("Prompt version not found");
+            }
+
+            int updated = promptVersionDAO.updateTags(versionId, tags, workspaceId);
+            if (updated == 0) {
+                throw new NotFoundException("Prompt version not found");
+            }
+
+            log.info("Successfully updated tags for prompt version '{}' in workspace '{}'", versionId, workspaceId);
+            return null;
+        });
     }
 
     @Override

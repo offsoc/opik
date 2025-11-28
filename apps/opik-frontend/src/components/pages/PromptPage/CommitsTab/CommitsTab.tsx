@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnSort, RowSelectionState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
 
@@ -20,13 +21,15 @@ import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
-import { convertColumnDataToColumn, isColumnSortable, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Separator } from "@/components/ui/separator";
 
 export const getRowId = (p: PromptVersion) => p.id;
@@ -74,6 +77,7 @@ export const DEFAULT_COLUMNS: ColumnData<PromptVersion>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
     accessorFn: (row) => row.tags || [],
     cell: ListCell as never,
   },
@@ -97,6 +101,40 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "tags",
   "created_at",
   "created_by",
+];
+
+export const FILTER_COLUMNS: ColumnData<PromptVersion>[] = [
+  {
+    id: "commit",
+    label: "Prompt commit",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "template",
+    label: "Prompt",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "change_description",
+    label: "Commit message",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+  },
+  {
+    id: "created_at",
+    label: "Created at",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 const CommitsTab = ({ prompt }: CommitsTabInterface) => {
@@ -133,12 +171,22 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     },
   );
 
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
+    updateType: "replaceIn",
+  });
+
+  const [commit = "", setCommit] = useQueryParam("commit", StringParam, {
+    updateType: "replaceIn",
+  });
+
   const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
+      commit,
       page: page,
       size: size,
       sorting: sortedColumns,
+      filters,
     },
     {
       enabled: !!prompt?.id,
@@ -147,10 +195,18 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     },
   );
 
-  const versions = useMemo(() => data?.content ?? [], [data?.content]);
+  // Filter versions to ensure they belong to the current prompt
+  // This prevents showing cached versions from a different prompt
+  const versions = useMemo(() => {
+    if (!data?.content || !prompt?.id) return [];
+    return data.content.filter((v) => v.prompt_id === prompt.id);
+  }, [data?.content, prompt?.id]);
   const noDataText = "There are no commits yet";
 
   const columns = useMemo(() => {
+    // Get sortable columns dynamically from backend API response
+    const sortableColumns = data?.sortable_by || [];
+
     return [
       generateSelectColumDef<PromptVersion>(),
       mapColumnDataFields<PromptVersion, PromptVersion>({
@@ -174,11 +230,11 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
         {
           columnsOrder,
           selectedColumns,
-          sortableColumns: [],
+          sortableColumns,
         },
       ),
     ];
-  }, [columnsOrder, selectedColumns]);
+  }, [columnsOrder, selectedColumns, data?.sortable_by]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -209,10 +265,24 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-end gap-x-8 gap-y-2 py-4"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
+        <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={commit}
+            setSearchText={setCommit}
+            placeholder="Search by commit"
+            className="w-[320px]"
+            dimension="sm"
+          />
+          <FiltersButton
+            columns={FILTER_COLUMNS}
+            filters={filters}
+            onChange={setFilters}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <CommitsActionsPanel versions={selectedRows} />
           <Separator orientation="vertical" className="mx-2 h-4" />

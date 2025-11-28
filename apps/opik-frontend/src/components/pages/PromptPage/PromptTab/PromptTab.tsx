@@ -21,6 +21,8 @@ import RestoreVersionDialog from "./RestoreVersionDialog";
 import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
+import useUpdatePromptVersionTagsMutation from "@/api/prompts/useUpdatePromptVersionTagsMutation";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -38,6 +40,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const editPromptResetKeyRef = useRef(0);
+  const updateTagsMutation = useUpdatePromptVersionTagsMutation();
 
   const { data } = usePromptVersionsById(
     {
@@ -60,7 +63,12 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     },
   );
 
-  const versions = data?.content;
+  // Filter versions to ensure they belong to the current prompt
+  // This prevents showing cached versions from a different prompt
+  const versions = useMemo(() => {
+    if (!data?.content || !prompt?.id) return [];
+    return data.content.filter((v) => v.prompt_id === prompt.id);
+  }, [data?.content, prompt?.id]);
 
   const handleOpenEditPrompt = (value: boolean) => {
     editPromptResetKeyRef.current = editPromptResetKeyRef.current + 1;
@@ -172,23 +180,31 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </>
           )}
 
-          {activeVersion?.tags && activeVersion.tags.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Tags
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {activeVersion.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-md bg-primary-foreground px-2 py-1 text-xs font-medium text-foreground"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
+          <>
+            <p className="comet-body-s-accented mt-4 text-foreground">Tags</p>
+            <TagListRenderer
+              tags={activeVersion?.tags || []}
+              onAddTag={(newTag) => {
+                if (!activeVersion?.id) return;
+                const updatedTags = [...(activeVersion.tags || []), newTag];
+                updateTagsMutation.mutate({
+                  versionId: activeVersion.id,
+                  tags: updatedTags,
+                });
+              }}
+              onDeleteTag={(tagToDelete) => {
+                if (!activeVersion?.id) return;
+                const updatedTags = (activeVersion.tags || []).filter(
+                  (t) => t !== tagToDelete,
+                );
+                updateTagsMutation.mutate({
+                  versionId: activeVersion.id,
+                  tags: updatedTags,
+                });
+              }}
+              align="start"
+            />
+          </>
 
           {activeVersion?.change_description && (
             <>
@@ -201,7 +217,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </>
           )}
         </div>
-        <div className="min-w-[320px]">
+        <div className="w-[380px] shrink-0">
           <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
             Commit history
             <ExplainerIcon
@@ -231,7 +247,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
-        tags={activeVersion?.tags}
         onSetActiveVersionId={setActiveVersionId}
       />
 
