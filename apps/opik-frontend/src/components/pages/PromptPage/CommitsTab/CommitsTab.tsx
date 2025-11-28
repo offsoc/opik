@@ -31,6 +31,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Separator } from "@/components/ui/separator";
+import PromptVersionsMetadataAutocomplete from "@/components/pages/PromptPage/CommitsTab/PromptVersionsMetadataAutocomplete";
 
 export const getRowId = (p: PromptVersion) => p.id;
 
@@ -286,6 +287,17 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
             columns={FILTER_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            config={{
+              rowsMap: {
+                metadata: {
+                  keyComponent: PromptVersionsMetadataAutocomplete,
+                  keyComponentProps: {
+                    prompt: prompt,
+                    placeholder: "key",
+                  },
+                },
+              },
+            }}
           />
         </div>
         <div className="flex items-center gap-2">
