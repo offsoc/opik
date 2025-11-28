@@ -188,7 +188,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
-      commit,
+      commit: commit ?? undefined,
       page: page,
       size: size,
       sorting: sortedColumns,
@@ -272,8 +272,8 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
       >
         <div className="flex items-center gap-2">
           <SearchInput
-            searchText={commit}
-            setSearchText={setCommit}
+            searchText={commit ?? ""}
+            setSearchText={(value) => setCommit(value || null)}
             placeholder="Search by commit"
             className="w-[320px]"
             dimension="sm"
@@ -285,7 +285,12 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
             config={{
               rowsMap: {
                 metadata: {
-                  keyComponent: PromptVersionsMetadataAutocomplete,
+                  keyComponent:
+                    PromptVersionsMetadataAutocomplete as React.FC<unknown> & {
+                      placeholder: string;
+                      value: string;
+                      onValueChange: (value: string) => void;
+                    },
                   keyComponentProps: {
                     prompt: prompt,
                     placeholder: "key",

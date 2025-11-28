@@ -50,10 +50,14 @@ const CommitsActionsPanel: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content="Compare commits">
-        <Button size="sm" onClick={() => {
-          setOpen(1);
-          resetKeyRef.current = resetKeyRef.current + 1;
-        }} disabled={compareDisabled}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setOpen(1);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={compareDisabled}
+        >
           <Split className="mr-1.5 size-3.5" />
           Compare
         </Button>

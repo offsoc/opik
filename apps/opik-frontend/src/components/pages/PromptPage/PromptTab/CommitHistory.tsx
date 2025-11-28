@@ -53,7 +53,7 @@ const CommitHistory = ({
               onMouseLeave={() => setHoveredVersionId(null)}
               onClick={() => onVersionClick(version)}
             >
-              <div className="flex items-center gap-2 min-w-0 h-[24px]">
+              <div className="flex h-[24px] min-w-0 items-center gap-2">
                 <GitCommitVertical className="size-4 shrink-0 text-muted-slate" />
                 <span
                   className={cn("comet-body-s shrink-0", {
@@ -73,21 +73,23 @@ const CommitHistory = ({
                   >
                     ·
                   </span>
-                  <div className="flex gap-1 overflow-hidden items-center max-w-[160px] shrink flex-nowrap">
+                  <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-1 overflow-hidden">
                     {version.tags &&
                       version.tags.length > 0 &&
-                      version.tags.slice(0, 3).map((tag) => (
-                        <ColoredTag
-                          key={tag}
-                          label={tag}
-                          size="xs"
-                          className="max-w-[65px] truncate scale-[0.85] origin-left shrink min-w-0"
-                        />
-                      ))}
+                      version.tags
+                        .slice(0, 3)
+                        .map((tag) => (
+                          <ColoredTag
+                            key={tag}
+                            label={tag}
+                            size="sm"
+                            className="min-w-0 max-w-[65px] shrink origin-left scale-[0.85] truncate"
+                          />
+                        ))}
                     {version.tags && version.tags.length > 3 && (
                       <TooltipWrapper
                         content={
-                          <div className="flex flex-col gap-1 max-w-[200px]">
+                          <div className="flex max-w-[200px] flex-col gap-1">
                             <span className="text-xs font-medium">
                               All tags ({version.tags.length}):
                             </span>
@@ -104,7 +106,7 @@ const CommitHistory = ({
                           </div>
                         }
                       >
-                        <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-muted-slate/10 text-muted-slate shrink-0 whitespace-nowrap cursor-help">
+                        <span className="inline-flex shrink-0 cursor-help items-center whitespace-nowrap rounded bg-muted-slate/10 px-1 py-0.5 text-[9px] font-medium text-muted-slate">
                           +{version.tags.length - 3}
                         </span>
                       </TooltipWrapper>

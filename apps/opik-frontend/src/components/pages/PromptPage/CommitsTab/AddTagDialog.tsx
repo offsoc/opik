@@ -49,7 +49,9 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         onSuccess: () => {
           toast({
             title: "Success",
-            description: `Tag "${newTag}" added to ${rows.length} selected prompt version${rows.length > 1 ? "s" : ""}`,
+            description: `Tag "${newTag}" added to ${
+              rows.length
+            } selected prompt version${rows.length > 1 ? "s" : ""}`,
           });
 
           if (onSuccess) {
@@ -94,4 +96,3 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 };
 
 export default AddTagDialog;
-

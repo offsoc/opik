@@ -25,7 +25,14 @@ type UsePromptsVersionsByIdResponse = {
 
 const getPromptVersionsById = async (
   { signal }: QueryFunctionContext,
-  { promptId, size, page, commit, sorting, filters }: UsePromptVersionsByIdParams,
+  {
+    promptId,
+    size,
+    page,
+    commit,
+    sorting,
+    filters,
+  }: UsePromptVersionsByIdParams,
 ) => {
   const { data } = await api.get(
     `${PROMPTS_REST_ENDPOINT}${promptId}/versions`,
