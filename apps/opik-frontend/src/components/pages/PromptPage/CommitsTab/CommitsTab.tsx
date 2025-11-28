@@ -201,12 +201,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     },
   );
 
-  // Filter versions to ensure they belong to the current prompt
-  // This prevents showing cached versions from a different prompt
-  const versions = useMemo(() => {
-    if (!data?.content || !prompt?.id) return [];
-    return data.content.filter((v) => v.prompt_id === prompt.id);
-  }, [data?.content, prompt?.id]);
+  const versions = useMemo(() => data?.content ?? [], [data?.content]);
   const noDataText = "There are no commits yet";
 
   const columns = useMemo(() => {

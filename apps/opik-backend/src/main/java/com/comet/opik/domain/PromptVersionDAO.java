@@ -73,10 +73,10 @@ interface PromptVersionDAO {
     List<PromptVersion> find(
             @Bind("workspace_id") String workspaceId,
             @Nullable @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Collection<UUID> ids,
-            @Nullable @Bind("prompt_id") UUID promptId,
+            @Nullable @Define("prompt_id") @Bind("prompt_id") UUID promptId,
             @Nullable @Define("commit") @Bind("commit") String commit,
-            @Nullable @Bind("offset") Integer offset,
-            @Nullable @Bind("limit") Integer limit,
+            @Nullable @Define("offset") @Bind("offset") Integer offset,
+            @Nullable @Define("limit") @Bind("limit") Integer limit,
             @Define("sort_fields") String sortingFields,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
@@ -109,7 +109,7 @@ interface PromptVersionDAO {
     long findCount(
             @Bind("workspace_id") String workspaceId,
             @Nullable @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Collection<UUID> ids,
-            @Nullable @Bind("prompt_id") UUID promptId,
+            @Nullable @Define("prompt_id") @Bind("prompt_id") UUID promptId,
             @Nullable @Define("commit") @Bind("commit") String commit,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
