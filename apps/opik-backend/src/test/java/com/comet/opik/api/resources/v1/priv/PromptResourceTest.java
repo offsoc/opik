@@ -71,6 +71,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -3124,6 +3125,202 @@ class PromptResourceTest {
                 assertThat(updatedVersion.commit()).isEqualTo(originalCommit);
                 assertThat(updatedVersion.createdAt()).isEqualTo(originalCreatedAt);
                 assertThat(updatedVersion.createdBy()).isEqualTo(originalCreatedBy);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: batch update prompt version tags")
+        void batchUpdatePromptVersionTags() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Create multiple versions
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("old-tag1"))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("old-tag2"))
+                    .build();
+
+            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("old-tag3"))
+                    .build();
+
+            var createdVersion1 = createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY,
+                    TEST_WORKSPACE);
+            var createdVersion2 = createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY,
+                    TEST_WORKSPACE);
+            var createdVersion3 = createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Batch update tags (replace mode)
+            var batchUpdate = Map.of(
+                    "ids", Set.of(createdVersion1.id(), createdVersion2.id(), createdVersion3.id()),
+                    "update", Map.of("tags", Set.of("new-tag")),
+                    "merge_tags", false);
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Verify all versions were updated
+            var getTarget1 = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion1.id()));
+            var getTarget2 = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion2.id()));
+            var getTarget3 = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion3.id()));
+
+            try (var response1 = getTarget1.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+                    var response2 = getTarget2.request()
+                            .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                            .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                            .get();
+                    var response3 = getTarget3.request()
+                            .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                            .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                            .get()) {
+
+                assertThat(response1.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response2.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response3.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var updatedVersion1 = response1.readEntity(PromptVersion.class);
+                var updatedVersion2 = response2.readEntity(PromptVersion.class);
+                var updatedVersion3 = response3.readEntity(PromptVersion.class);
+
+                assertThat(updatedVersion1.tags()).containsExactly("new-tag");
+                assertThat(updatedVersion2.tags()).containsExactly("new-tag");
+                assertThat(updatedVersion3.tags()).containsExactly("new-tag");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: batch update prompt version tags with merge")
+        void batchUpdatePromptVersionTagsWithMerge() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Create multiple versions
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("existing-tag1"))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of("existing-tag2"))
+                    .build();
+
+            var createdVersion1 = createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY,
+                    TEST_WORKSPACE);
+            var createdVersion2 = createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Batch update tags (merge mode)
+            var batchUpdate = Map.of(
+                    "ids", Set.of(createdVersion1.id(), createdVersion2.id()),
+                    "update", Map.of("tags", Set.of("new-tag")),
+                    "merge_tags", true);
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Verify tags were merged
+            var getTarget1 = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion1.id()));
+            var getTarget2 = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion2.id()));
+
+            try (var response1 = getTarget1.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+                    var response2 = getTarget2.request()
+                            .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                            .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                            .get()) {
+
+                assertThat(response1.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response2.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var updatedVersion1 = response1.readEntity(PromptVersion.class);
+                var updatedVersion2 = response2.readEntity(PromptVersion.class);
+
+                assertThat(updatedVersion1.tags()).containsExactlyInAnyOrder("existing-tag1", "new-tag");
+                assertThat(updatedVersion2.tags()).containsExactlyInAnyOrder("existing-tag2", "new-tag");
+            }
+        }
+
+        @Test
+        @DisplayName("Error: batch update with empty IDs returns 400")
+        void batchUpdateWithEmptyIds() {
+            var batchUpdate = Map.of(
+                    "ids", Set.of(),
+                    "update", Map.of("tags", Set.of("test")),
+                    "merge_tags", false);
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: batch update with non-existent IDs returns 404")
+        void batchUpdateWithNonExistentIds() {
+            var batchUpdate = Map.of(
+                    "ids", Set.of(UUID.randomUUID(), UUID.randomUUID()),
+                    "update", Map.of("tags", Set.of("test")),
+                    "merge_tags", false);
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
     }

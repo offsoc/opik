@@ -37,6 +37,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
@@ -72,6 +74,8 @@ public interface PromptService {
     PromptVersion getVersionById(UUID id);
 
     void updateVersionTags(UUID versionId, Set<String> tags);
+
+    void batchUpdateVersionTags(Set<UUID> versionIds, Set<String> tags, boolean mergeTags);
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
@@ -576,6 +580,45 @@ class PromptServiceImpl implements PromptService {
             }
 
             log.info("Successfully updated tags for prompt version '{}' in workspace '{}'", versionId, workspaceId);
+            return null;
+        });
+    }
+
+    @Override
+    public void batchUpdateVersionTags(@NonNull Set<UUID> versionIds, Set<String> tags, boolean mergeTags) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Batch updating tags for '{}' prompt versions in workspace '{}'", versionIds.size(), workspaceId);
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            var promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            // Fetch existing versions to get current tags
+            var existingVersions = promptVersionDAO.findByIds(versionIds, workspaceId);
+            if (existingVersions.isEmpty()) {
+                throw new NotFoundException("No prompt versions found for the provided IDs");
+            }
+
+            // Build map of versionId -> currentTags
+            Map<UUID, Set<String>> versionTagsMap = existingVersions.stream()
+                    .collect(toMap(PromptVersion::id, v -> v.tags() != null ? v.tags() : Set.of()));
+
+            // Update each version
+            for (var versionId : versionIds) {
+                var currentTags = versionTagsMap.get(versionId);
+                if (currentTags == null) {
+                    log.warn("Skipping version '{}' - not found in workspace '{}'", versionId, workspaceId);
+                    continue;
+                }
+
+                var updatedTags = mergeTags
+                        ? Stream.concat(currentTags.stream(), tags.stream()).collect(Collectors.toSet())
+                        : tags;
+
+                promptVersionDAO.updateTags(versionId, updatedTags, workspaceId);
+            }
+
+            log.info("Successfully batch updated tags for '{}' prompt versions in workspace '{}'",
+                    existingVersions.size(), workspaceId);
             return null;
         });
     }

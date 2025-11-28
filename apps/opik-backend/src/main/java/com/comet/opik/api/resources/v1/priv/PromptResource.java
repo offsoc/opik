@@ -7,6 +7,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
+import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.UpdatePromptVersionTags;
 import com.comet.opik.api.error.ErrorMessage;
@@ -284,6 +285,31 @@ public class PromptResource {
         promptService.updateVersionTags(versionId, request.tags());
 
         log.info("Updated tags for prompt version '{}' on workspace_id '{}'", versionId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/versions/batch")
+    @Operation(operationId = "batchUpdatePromptVersions", summary = "Batch update prompt versions", description = "Update multiple prompt versions", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response batchUpdatePromptVersions(
+            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionBatchUpdate.class))) @Valid @NotNull PromptVersionBatchUpdate batchUpdate) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' prompt versions on workspace_id '{}'", batchUpdate.ids().size(), workspaceId);
+
+        promptService.batchUpdateVersionTags(
+                batchUpdate.ids(),
+                batchUpdate.update().tags(),
+                Boolean.TRUE.equals(batchUpdate.mergeTags()));
+
+        log.info("Batch updated '{}' prompt versions on workspace_id '{}'", batchUpdate.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
