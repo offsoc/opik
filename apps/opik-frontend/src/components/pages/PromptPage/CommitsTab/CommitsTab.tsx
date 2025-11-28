@@ -120,6 +120,11 @@ export const FILTER_COLUMNS: ColumnData<PromptVersion>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "metadata",
+    label: "Metadata",
+    type: COLUMN_TYPE.dictionary,
+  },
+  {
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,

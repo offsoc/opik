@@ -11,6 +11,8 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.PromptField;
 import com.comet.opik.api.filter.PromptFilter;
+import com.comet.opik.api.filter.PromptVersionField;
+import com.comet.opik.api.filter.PromptVersionFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -2899,6 +2901,544 @@ class PromptResourceTest {
                 assertThat(page.content().get(0).tags()).contains("production");
             }
         }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by metadata field with EQUAL operator")
+        void filterPromptVersionsByMetadataEqual() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("environment", "production", "version", "1.0")))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("environment", "development", "version", "2.0")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.environment = "production"
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key("environment")
+                            .value("production")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("environment").asText()).isEqualTo("production");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by metadata field with CONTAINS operator")
+        void filterPromptVersionsByMetadataContains() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("description", "This is a production-ready template")))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("description", "Development template for testing")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.description contains "production"
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.CONTAINS)
+                            .key("description")
+                            .value("production")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("description").asText()).contains("production");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by metadata field with NOT_CONTAINS operator")
+        void filterPromptVersionsByMetadataNotContains() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("status", "approved")))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("status", "deprecated")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.status does not contain "deprecated"
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.NOT_CONTAINS)
+                            .key("status")
+                            .value("deprecated")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("status").asText()).isEqualTo("approved");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by metadata field with STARTS_WITH operator")
+        void filterPromptVersionsByMetadataStartsWith() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("model", "gpt-4-turbo")))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("model", "claude-3-sonnet")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.model starts with "gpt"
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.STARTS_WITH)
+                            .key("model")
+                            .value("gpt")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("model").asText()).startsWith("gpt");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by metadata field with ENDS_WITH operator")
+        void filterPromptVersionsByMetadataEndsWith() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("file_type", "template.json")))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("file_type", "template.yaml")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.file_type ends with ".json"
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.ENDS_WITH)
+                            .key("file_type")
+                            .value(".json")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("file_type").asText()).endsWith(".json");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by numeric metadata field with GREATER_THAN operator")
+        void filterPromptVersionsByMetadataGreaterThan() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("max_tokens", 1000)))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("max_tokens", 2000)))
+                    .build();
+
+            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("max_tokens", 500)))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.max_tokens > 1000
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.GREATER_THAN)
+                            .key("max_tokens")
+                            .value("1000")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("max_tokens").asInt()).isGreaterThan(1000);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by numeric metadata field with LESS_THAN operator")
+        void filterPromptVersionsByMetadataLessThan() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("temperature", 0.7)))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("temperature", 1.5)))
+                    .build();
+
+            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("temperature", 0.3)))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.temperature < 0.7
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.LESS_THAN)
+                            .key("temperature")
+                            .value("0.7")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("temperature").asDouble()).isLessThan(0.7);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by multiple metadata fields")
+        void filterPromptVersionsByMultipleMetadataFields() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("environment", "production", "region", "us-east-1")))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("environment", "production", "region", "eu-west-1")))
+                    .build();
+
+            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of("environment", "development", "region", "us-east-1")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata.environment = "production" AND metadata.region = "us-east-1"
+            var filters = toURLEncodedQueryParam(
+                    List.of(
+                            PromptVersionFilter.builder()
+                                    .field(PromptVersionField.METADATA)
+                                    .operator(Operator.EQUAL)
+                                    .key("environment")
+                                    .value("production")
+                                    .build(),
+                            PromptVersionFilter.builder()
+                                    .field(PromptVersionField.METADATA)
+                                    .operator(Operator.EQUAL)
+                                    .key("region")
+                                    .value("us-east-1")
+                                    .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("environment").asText()).isEqualTo("production");
+                assertThat(page.content().get(0).metadata().get("region").asText()).isEqualTo("us-east-1");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: filter by metadata keys with spaces and special characters")
+        void filterPromptVersionsByMetadataKeysWithSpaces() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", "000",
+                            "model name", "gpt-4",
+                            "max tokens", 1000)))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", "111",
+                            "model name", "claude-3")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata key with spaces using EQUAL operator
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key("prompt metadata")
+                            .value("000")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("prompt metadata").asText()).isEqualTo("000");
+            }
+
+            // Filter by another key with spaces using CONTAINS operator
+            var filters2 = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.CONTAINS)
+                            .key("model name")
+                            .value("gpt")
+                            .build()));
+
+            var target2 = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters2);
+
+            try (var response = target2.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("model name").asText()).contains("gpt");
+            }
+
+            // Filter by numeric metadata key with spaces using GREATER_THAN operator
+            var filters3 = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.GREATER_THAN)
+                            .key("max tokens")
+                            .value("500")
+                            .build()));
+
+            var target3 = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters3);
+
+            try (var response = target3.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("max tokens").asInt()).isGreaterThan(500);
+            }
+        }
     }
 
     @Nested
@@ -2937,7 +3477,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
@@ -2990,7 +3530,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
@@ -3022,7 +3562,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
@@ -3058,7 +3598,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
@@ -3102,7 +3642,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
@@ -3175,7 +3715,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
@@ -3255,7 +3795,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
@@ -3299,7 +3839,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
@@ -3318,7 +3858,7 @@ class PromptResourceTest {
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .build("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
+                    .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }

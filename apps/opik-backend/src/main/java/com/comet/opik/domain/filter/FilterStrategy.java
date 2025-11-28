@@ -33,6 +33,20 @@ public enum FilterStrategy {
         String fieldName = field.getQueryParamField();
         int firstDot = fieldName.indexOf('.');
 
+        // For PROMPT_VERSION, handle metadata fields like "metadata.environment" (MySQL state DB)
+        if (this == PROMPT_VERSION && firstDot > 0) {
+            // Field like "metadata.environment" - "metadata" is the JSON column name
+            // MySQL 8.4 supports JSON_VALUE natively for extracting scalar values
+            String columnName = fieldName.substring(0, firstDot);
+            // Return a template with %1$d placeholder that will be formatted with the filter index
+            return switch (field.getType()) {
+                case STRING -> "JSON_VALUE(%s, :dynamicJsonPath%%1$d)".formatted(columnName);
+                case NUMBER -> "CAST(JSON_VALUE(%s, :dynamicJsonPath%%1$d) AS DECIMAL(65,9))".formatted(columnName);
+                case DICTIONARY_STATE_DB -> columnName;
+                default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
+            };
+        }
+
         // For EXPERIMENT_ITEM, handle fields like "output.some_field" where "output" is a column name
         if (this == EXPERIMENT_ITEM && firstDot > 0) {
             // Field like "output.some_field" - "output" is the column name, "some_field" is JSON path

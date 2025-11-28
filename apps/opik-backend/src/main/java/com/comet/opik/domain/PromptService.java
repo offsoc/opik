@@ -537,7 +537,7 @@ class PromptServiceImpl implements PromptService {
                 .flatMap(filter -> filterQueryBuilder.toAnalyticsDbFilters(filter, FilterStrategy.PROMPT_VERSION))
                 .orElse(null);
         var filterMapping = Optional.ofNullable(filters)
-                .map(filterQueryBuilder::toStateSQLMapping)
+                .map(f -> filterQueryBuilder.toStateSQLMapping(f, FilterStrategy.PROMPT_VERSION))
                 .orElse(Map.of());
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var promptVersionDAO = handle.attach(PromptVersionDAO.class);

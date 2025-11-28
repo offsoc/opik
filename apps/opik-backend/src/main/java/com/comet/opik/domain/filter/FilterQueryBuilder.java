@@ -125,22 +125,30 @@ public class FilterQueryBuilder {
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                             FieldType.DICTIONARY,
-                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
+                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d ,'%%')")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.DICTIONARY,
-                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
+                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
                             FieldType.DICTIONARY,
-                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
+                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT(:filter%2$d ,'%%')")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
                             FieldType.DICTIONARY,
-                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
+                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d)")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)"),
@@ -151,6 +159,8 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"))))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
@@ -164,6 +174,8 @@ public class FilterQueryBuilder {
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
                             Map.entry(FieldType.DICTIONARY,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"))))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
@@ -174,14 +186,18 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
-                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)"))))
+                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "CAST(JSON_VALUE(%1$s, :filterKey%2$d) AS DECIMAL(65,9)) > CAST(:filter%2$d AS DECIMAL(65,9))"))))
                     .put(Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s >= :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s >= :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s >= :filter%2$d"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
-                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"))))
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "CAST(JSON_VALUE(%1$s, :filterKey%2$d) AS DECIMAL(65,9)) >= CAST(:filter%2$d AS DECIMAL(65,9))"))))
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)"),
                             Map.entry(FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)"),
@@ -191,14 +207,18 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
-                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)"))))
+                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "CAST(JSON_VALUE(%1$s, :filterKey%2$d) AS DECIMAL(65,9)) < CAST(:filter%2$d AS DECIMAL(65,9))"))))
                     .put(Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s <= :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s <= :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s <= :filter%2$d"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
-                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"))))
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "CAST(JSON_VALUE(%1$s, :filterKey%2$d) AS DECIMAL(65,9)) <= CAST(:filter%2$d AS DECIMAL(65,9))"))))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
@@ -308,6 +328,7 @@ public class FilterQueryBuilder {
                     .put(PromptVersionField.COMMIT, COMMIT_DB)
                     .put(PromptVersionField.TEMPLATE, TEMPLATE_DB)
                     .put(PromptVersionField.CHANGE_DESCRIPTION, CHANGE_DESCRIPTION_DB)
+                    .put(PromptVersionField.METADATA, METADATA_ANALYTICS_DB)
                     .put(PromptVersionField.TYPE, TYPE_DB)
                     .put(PromptVersionField.TAGS, TAGS_DB)
                     .put(PromptVersionField.CREATED_AT, CREATED_AT_DB)
@@ -588,6 +609,7 @@ public class FilterQueryBuilder {
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
+            FieldType.DICTIONARY_STATE_DB,
             FieldType.FEEDBACK_SCORES_NUMBER);
 
     public Map<Field, List<Operator>> getUnSupportedOperators(@NonNull Field... fields) {
@@ -720,9 +742,23 @@ public class FilterQueryBuilder {
                 if (filter.field().isDynamic(filterStrategy)) {
                     String fieldName = filter.field().getQueryParamField();
 
-                    // For EXPERIMENT_ITEM, split fields like "output.some_field" into column name and JSON path
-                    // Only bind the JSON path (column name is embedded in SQL template)
-                    if (filterStrategy == FilterStrategy.EXPERIMENT_ITEM && fieldName.contains(".")) {
+                    // For PROMPT_VERSION, split fields like "metadata.environment" into column name and JSON path
+                    // MySQL uses JSON_VALUE(column, '$.path') syntax with quoted keys for spaces
+                    if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                        int firstDot = fieldName.indexOf('.');
+                        String jsonKey = fieldName.substring(firstDot + 1);
+                        // Use quoted dot notation for keys with spaces: $."my key"
+                        String jsonPath;
+                        if (jsonKey.contains(" ") || jsonKey.contains("-") || jsonKey.contains(".")) {
+                            jsonPath = "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
+                        } else {
+                            jsonPath = "%s.%s".formatted(JSONPATH_ROOT, jsonKey);
+                        }
+
+                        statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
+                    } else if (filterStrategy == FilterStrategy.EXPERIMENT_ITEM && fieldName.contains(".")) {
+                        // For EXPERIMENT_ITEM, split fields like "output.some_field" into column name and JSON path
+                        // Only bind the JSON path (column name is embedded in SQL template)
                         int firstDot = fieldName.indexOf('.');
                         String jsonKey = fieldName.substring(firstDot + 1);
                         String jsonPath = JSONPATH_ROOT + "." + jsonKey;
@@ -756,10 +792,42 @@ public class FilterQueryBuilder {
     }
 
     public Map<String, Object> toStateSQLMapping(@NonNull List<? extends Filter> filters) {
+        return toStateSQLMapping(filters, null);
+    }
+
+    public Map<String, Object> toStateSQLMapping(@NonNull List<? extends Filter> filters,
+            FilterStrategy filterStrategy) {
         Map<String, Object> stateSQLMapping = new HashMap<>();
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
             stateSQLMapping.put("filter%d".formatted(i), filter.value());
+
+            // Handle dynamic fields for PROMPT_VERSION (MySQL state DB)
+            if (filterStrategy != null && filter.field().isDynamic(filterStrategy)) {
+                String fieldName = filter.field().getQueryParamField();
+
+                // For PROMPT_VERSION, bind JSON paths for metadata fields like "metadata.environment"
+                if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                    int firstDot = fieldName.indexOf('.');
+                    String jsonKey = fieldName.substring(firstDot + 1);
+                    // Use quoted dot notation for keys with spaces: $."my key"
+                    String jsonPath;
+                    if (jsonKey.contains(" ") || jsonKey.contains("-") || jsonKey.contains(".")) {
+                        jsonPath = "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
+                    } else {
+                        jsonPath = "%s.%s".formatted(JSONPATH_ROOT, jsonKey);
+                    }
+
+                    stateSQLMapping.put("dynamicJsonPath%d".formatted(i), jsonPath);
+                }
+            }
+
+            // Handle filter keys for DICTIONARY fields
+            if (StringUtils.isNotBlank(filter.key())
+                    && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
+                var key = getKey(filter);
+                stateSQLMapping.put("filterKey%d".formatted(i), key);
+            }
         }
 
         return stateSQLMapping;
@@ -767,12 +835,24 @@ public class FilterQueryBuilder {
 
     private String getKey(Filter filter) {
 
-        if (filter.key().startsWith(JSONPATH_ROOT) || filter.field().getType() != FieldType.DICTIONARY) {
+        if (filter.key().startsWith(JSONPATH_ROOT)
+                || (filter.field().getType() != FieldType.DICTIONARY
+                        && filter.field().getType() != FieldType.DICTIONARY_STATE_DB)) {
             return filter.key();
         }
 
         if (filter.key().startsWith("[") || filter.key().startsWith(".")) {
             return "%s%s".formatted(JSONPATH_ROOT, filter.key());
+        }
+
+        // For DICTIONARY_STATE_DB (MySQL), use quoted dot notation to handle keys with spaces and special characters
+        // MySQL supports both $.key and $."key with spaces"
+        if (filter.field().getType() == FieldType.DICTIONARY_STATE_DB) {
+            // If key contains spaces or special characters, wrap in quotes
+            if (filter.key().contains(" ") || filter.key().contains("-") || filter.key().contains(".")) {
+                return "%s.\"%s\"".formatted(JSONPATH_ROOT, filter.key());
+            }
+            return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
         }
 
         return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
