@@ -3576,7 +3576,7 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Error: update tags with null tags returns 400")
+        @DisplayName("Success: update tags with null tags clears all tags")
         void updateTagsWithNullTags() {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
@@ -3590,16 +3590,19 @@ class PromptResourceTest {
 
             var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
-                    .tags(Set.of("test"))
+                    .tags(Set.of("test", "example"))
                     .build();
 
             var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
                     TEST_WORKSPACE);
 
-            // Try to update with null tags (invalid)
+            // Update with null tags (clears all tags)
+            var update = new java.util.HashMap<String, Object>();
+            update.put("tags", null);
+
             var updateRequest = Map.of(
                     "ids", Set.of(createdVersion.id()),
-                    "update", Map.of("tags", (Object) null),
+                    "update", update,
                     "merge_tags", false);
 
             var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
@@ -3609,7 +3612,22 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Verify tags were cleared
+            var getTarget = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
+
+            try (var response = getTarget.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var updatedVersion = response.readEntity(PromptVersion.class);
+                assertThat(updatedVersion.tags()).isNullOrEmpty();
             }
         }
 
@@ -3838,7 +3856,7 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Error: batch update with empty IDs returns 400")
+        @DisplayName("Error: batch update with empty IDs returns 422")
         void batchUpdateWithEmptyIds() {
             var batchUpdate = Map.of(
                     "ids", Set.of(),
@@ -3852,7 +3870,7 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
             }
         }
 
