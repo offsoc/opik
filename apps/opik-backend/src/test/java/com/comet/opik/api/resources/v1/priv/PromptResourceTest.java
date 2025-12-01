@@ -3038,39 +3038,111 @@ class PromptResourceTest {
                             Operator.LESS_THAN,
                             "0.7",
                             1,
-                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("temperature").asDouble() < 0.7),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("temperature").asDouble() < 0.7));
+        }
 
-                    // Metadata key with spaces - EQUAL
-                    arguments(
-                            "prompt metadata",
-                            "000",
-                            "111",
-                            Operator.EQUAL,
-                            "000",
-                            1,
-                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("prompt metadata").asText()
-                                    .equals("000")),
+        @Test
+        @DisplayName("Success: filter by metadata keys with spaces and special characters")
+        void filterPromptVersionsByMetadataKeysWithSpaces() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
 
-                    // Metadata key with spaces - CONTAINS
-                    arguments(
-                            "model name",
-                            "gpt-4-turbo",
-                            "claude-3",
-                            Operator.CONTAINS,
-                            "gpt",
-                            1,
-                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("model name").asText()
-                                    .contains("gpt")),
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-                    // Metadata key with spaces - GREATER_THAN (numeric)
-                    arguments(
-                            "max tokens",
-                            1000,
-                            200,
-                            Operator.GREATER_THAN,
-                            "500",
-                            1,
-                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("max tokens").asInt() > 500));
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", "000",
+                            "model name", "gpt-4",
+                            "max tokens", 1000)))
+                    .build();
+
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", "111",
+                            "model name", "claude-3")))
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
+            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+
+            // Filter by metadata key with spaces using EQUAL operator
+            var filters = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key("prompt metadata")
+                            .value("000")
+                            .build()));
+
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters);
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("prompt metadata").asText()).isEqualTo("000");
+            }
+
+            // Filter by another key with spaces using CONTAINS operator
+            var filters2 = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.CONTAINS)
+                            .key("model name")
+                            .value("gpt")
+                            .build()));
+
+            var target2 = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters2);
+
+            try (var response = target2.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("model name").asText()).contains("gpt");
+            }
+
+            // Filter by numeric metadata key with spaces using GREATER_THAN operator
+            var filters3 = toURLEncodedQueryParam(
+                    List.of(PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.GREATER_THAN)
+                            .key("max tokens")
+                            .value("500")
+                            .build()));
+
+            var target3 = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .queryParam("filters", filters3);
+
+            try (var response = target3.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
+                assertThat(page.total()).isEqualTo(1);
+                assertThat(page.content().get(0).metadata().get("max tokens").asInt()).isGreaterThan(500);
+            }
         }
 
         @Test

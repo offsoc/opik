@@ -19,9 +19,13 @@ public class TestUtils {
     }
 
     public static String toURLEncodedQueryParam(List<?> filters) {
-        return CollectionUtils.isEmpty(filters)
-                ? null
-                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+        if (CollectionUtils.isEmpty(filters)) {
+            return null;
+        }
+        // URLEncoder.encode() uses '+' for spaces, but for query parameters we need '%20'
+        // Replace '+' with '%20' to ensure spaces are properly decoded by Jersey
+        return URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 
     public static String getBaseUrl(ClientSupport client) {

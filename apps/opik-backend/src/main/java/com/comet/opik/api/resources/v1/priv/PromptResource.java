@@ -231,7 +231,6 @@ public class PromptResource {
     public Response getPromptVersions(@PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("commit") @Schema(description = "Filter versions by commit (partial match, case insensitive)") String commit,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -240,7 +239,7 @@ public class PromptResource {
         var sortingFields = sortingFactoryPromptVersions.newSorting(sorting);
         var versionFilters = filtersFactory.newFilters(filters, PromptVersionFilter.LIST_TYPE_REFERENCE);
         var promptVersionPage = promptService.getVersionsByPromptId(
-                id, commit, page, size, sortingFields, versionFilters);
+                id, page, size, sortingFields, versionFilters);
         log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'",
                 id, workspaceId, promptVersionPage.size());
         return Response.ok(promptVersionPage).build();
