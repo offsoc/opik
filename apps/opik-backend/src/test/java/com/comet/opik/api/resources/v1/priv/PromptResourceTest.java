@@ -2902,9 +2902,18 @@ class PromptResourceTest {
             }
         }
 
-        @Test
-        @DisplayName("Success: filter prompt versions by metadata field with EQUAL operator")
-        void filterPromptVersionsByMetadataEqual() {
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by metadata fields with various operators")
+        void filterPromptVersionsByMetadata(
+                String metadataKey,
+                Object metadataValue1,
+                Object metadataValue2,
+                Operator operator,
+                String filterValue,
+                int expectedTotal,
+                Function<PromptVersion, Boolean> assertion) {
+
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -2917,24 +2926,23 @@ class PromptResourceTest {
 
             var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("environment", "production", "version", "1.0")))
+                    .metadata(JsonUtils.valueToTree(Map.of(metadataKey, metadataValue1)))
                     .build();
 
             var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("environment", "development", "version", "2.0")))
+                    .metadata(JsonUtils.valueToTree(Map.of(metadataKey, metadataValue2)))
                     .build();
 
             createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
             createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
 
-            // Filter by metadata.environment = "production"
             var filters = toURLEncodedQueryParam(
                     List.of(PromptVersionFilter.builder()
                             .field(PromptVersionField.METADATA)
-                            .operator(Operator.EQUAL)
-                            .key("environment")
-                            .value("production")
+                            .operator(operator)
+                            .key(metadataKey)
+                            .value(filterValue)
                             .build()));
 
             var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
@@ -2948,327 +2956,121 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
                 var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("environment").asText()).isEqualTo("production");
+                assertThat(page.total()).isEqualTo(expectedTotal);
+                if (expectedTotal > 0) {
+                    assertThat(assertion.apply(page.content().get(0))).isTrue();
+                }
             }
         }
 
-        @Test
-        @DisplayName("Success: filter prompt versions by metadata field with CONTAINS operator")
-        void filterPromptVersionsByMetadataContains() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
+        Stream<Arguments> filterPromptVersionsByMetadata() {
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            "environment",
+                            "production",
+                            "development",
+                            Operator.EQUAL,
+                            "production",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("environment").asText()
+                                    .equals("production")),
 
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+                    // CONTAINS operator
+                    arguments(
+                            "description",
+                            "This is a production-ready template",
+                            "Development template for testing",
+                            Operator.CONTAINS,
+                            "production",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("description").asText()
+                                    .contains("production")),
 
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("description", "This is a production-ready template")))
-                    .build();
+                    // NOT_CONTAINS operator
+                    arguments(
+                            "status",
+                            "approved",
+                            "deprecated",
+                            Operator.NOT_CONTAINS,
+                            "deprecated",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("status").asText()
+                                    .equals("approved")),
 
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("description", "Development template for testing")))
-                    .build();
+                    // STARTS_WITH operator
+                    arguments(
+                            "model",
+                            "gpt-4-turbo",
+                            "claude-3-sonnet",
+                            Operator.STARTS_WITH,
+                            "gpt",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("model").asText()
+                                    .startsWith("gpt")),
 
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
+                    // ENDS_WITH operator
+                    arguments(
+                            "file_type",
+                            "template.json",
+                            "template.yaml",
+                            Operator.ENDS_WITH,
+                            ".json",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("file_type").asText()
+                                    .endsWith(".json")),
 
-            // Filter by metadata.description contains "production"
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.CONTAINS)
-                            .key("description")
-                            .value("production")
-                            .build()));
+                    // GREATER_THAN operator (numeric)
+                    arguments(
+                            "max_tokens",
+                            2000,
+                            500,
+                            Operator.GREATER_THAN,
+                            "1000",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("max_tokens").asInt() > 1000),
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
+                    // LESS_THAN operator (numeric)
+                    arguments(
+                            "temperature",
+                            1.5,
+                            0.3,
+                            Operator.LESS_THAN,
+                            "0.7",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("temperature").asDouble() < 0.7),
 
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+                    // Metadata key with spaces - EQUAL
+                    arguments(
+                            "prompt metadata",
+                            "000",
+                            "111",
+                            Operator.EQUAL,
+                            "000",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("prompt metadata").asText()
+                                    .equals("000")),
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                    // Metadata key with spaces - CONTAINS
+                    arguments(
+                            "model name",
+                            "gpt-4-turbo",
+                            "claude-3",
+                            Operator.CONTAINS,
+                            "gpt",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("model name").asText()
+                                    .contains("gpt")),
 
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("description").asText()).contains("production");
-            }
-        }
-
-        @Test
-        @DisplayName("Success: filter prompt versions by metadata field with NOT_CONTAINS operator")
-        void filterPromptVersionsByMetadataNotContains() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("status", "approved")))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("status", "deprecated")))
-                    .build();
-
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
-
-            // Filter by metadata.status does not contain "deprecated"
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.NOT_CONTAINS)
-                            .key("status")
-                            .value("deprecated")
-                            .build()));
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("status").asText()).isEqualTo("approved");
-            }
-        }
-
-        @Test
-        @DisplayName("Success: filter prompt versions by metadata field with STARTS_WITH operator")
-        void filterPromptVersionsByMetadataStartsWith() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("model", "gpt-4-turbo")))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("model", "claude-3-sonnet")))
-                    .build();
-
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
-
-            // Filter by metadata.model starts with "gpt"
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.STARTS_WITH)
-                            .key("model")
-                            .value("gpt")
-                            .build()));
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("model").asText()).startsWith("gpt");
-            }
-        }
-
-        @Test
-        @DisplayName("Success: filter prompt versions by metadata field with ENDS_WITH operator")
-        void filterPromptVersionsByMetadataEndsWith() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("file_type", "template.json")))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("file_type", "template.yaml")))
-                    .build();
-
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
-
-            // Filter by metadata.file_type ends with ".json"
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.ENDS_WITH)
-                            .key("file_type")
-                            .value(".json")
-                            .build()));
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("file_type").asText()).endsWith(".json");
-            }
-        }
-
-        @Test
-        @DisplayName("Success: filter prompt versions by numeric metadata field with GREATER_THAN operator")
-        void filterPromptVersionsByMetadataGreaterThan() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("max_tokens", 1000)))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("max_tokens", 2000)))
-                    .build();
-
-            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("max_tokens", 500)))
-                    .build();
-
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY, TEST_WORKSPACE);
-
-            // Filter by metadata.max_tokens > 1000
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.GREATER_THAN)
-                            .key("max_tokens")
-                            .value("1000")
-                            .build()));
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("max_tokens").asInt()).isGreaterThan(1000);
-            }
-        }
-
-        @Test
-        @DisplayName("Success: filter prompt versions by numeric metadata field with LESS_THAN operator")
-        void filterPromptVersionsByMetadataLessThan() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("temperature", 0.7)))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("temperature", 1.5)))
-                    .build();
-
-            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of("temperature", 0.3)))
-                    .build();
-
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY, TEST_WORKSPACE);
-
-            // Filter by metadata.temperature < 0.7
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.LESS_THAN)
-                            .key("temperature")
-                            .value("0.7")
-                            .build()));
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("temperature").asDouble()).isLessThan(0.7);
-            }
+                    // Metadata key with spaces - GREATER_THAN (numeric)
+                    arguments(
+                            "max tokens",
+                            1000,
+                            200,
+                            Operator.GREATER_THAN,
+                            "500",
+                            1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get("max tokens").asInt() > 500));
         }
 
         @Test
@@ -3335,110 +3137,6 @@ class PromptResourceTest {
                 assertThat(page.content().get(0).metadata().get("region").asText()).isEqualTo("us-east-1");
             }
         }
-
-        @Test
-        @DisplayName("Success: filter by metadata keys with spaces and special characters")
-        void filterPromptVersionsByMetadataKeysWithSpaces() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of(
-                            "prompt metadata", "000",
-                            "model name", "gpt-4",
-                            "max tokens", 1000)))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .metadata(JsonUtils.valueToTree(Map.of(
-                            "prompt metadata", "111",
-                            "model name", "claude-3")))
-                    .build();
-
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY, TEST_WORKSPACE);
-            createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY, TEST_WORKSPACE);
-
-            // Filter by metadata key with spaces using EQUAL operator
-            var filters = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.EQUAL)
-                            .key("prompt metadata")
-                            .value("000")
-                            .build()));
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters);
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("prompt metadata").asText()).isEqualTo("000");
-            }
-
-            // Filter by another key with spaces using CONTAINS operator
-            var filters2 = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.CONTAINS)
-                            .key("model name")
-                            .value("gpt")
-                            .build()));
-
-            var target2 = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters2);
-
-            try (var response = target2.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("model name").asText()).contains("gpt");
-            }
-
-            // Filter by numeric metadata key with spaces using GREATER_THAN operator
-            var filters3 = toURLEncodedQueryParam(
-                    List.of(PromptVersionFilter.builder()
-                            .field(PromptVersionField.METADATA)
-                            .operator(Operator.GREATER_THAN)
-                            .key("max tokens")
-                            .value("500")
-                            .build()));
-
-            var target3 = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .queryParam("filters", filters3);
-
-            try (var response = target3.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(PromptVersion.PromptVersionPage.class);
-                assertThat(page.total()).isEqualTo(1);
-                assertThat(page.content().get(0).metadata().get("max tokens").asInt()).isGreaterThan(500);
-            }
-        }
     }
 
     @Nested
@@ -3446,9 +3144,15 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class UpdatePromptVersionTagsTest {
 
-        @Test
-        @DisplayName("Success: update tags on existing prompt version")
-        void updateTagsOnExistingVersion() {
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Success: update single prompt version tags")
+        void updateSingleVersionTags(
+                Set<String> initialTags,
+                Object newTags,
+                boolean mergeTags,
+                Function<PromptVersion, Boolean> assertion) {
+
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -3461,18 +3165,25 @@ class PromptResourceTest {
 
             var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
-                    .tags(Set.of("initial", "test"))
+                    .tags(initialTags)
                     .build();
 
             var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
                     TEST_WORKSPACE);
 
-            // Update tags using batch endpoint
-            var newTags = Set.of("updated", "production", "stable");
+            // Store original values for verification
+            var originalTemplate = createdVersion.template();
+            var originalMetadata = createdVersion.metadata();
+            var originalCommit = createdVersion.commit();
+
+            // Update tags
+            var update = new java.util.HashMap<String, Object>();
+            update.put("tags", newTags);
+
             var updateRequest = Map.of(
                     "ids", Set.of(createdVersion.id()),
-                    "update", Map.of("tags", newTags),
-                    "merge_tags", false);
+                    "update", update,
+                    "merge_tags", mergeTags);
 
             var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
@@ -3484,7 +3195,7 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
 
-            // Verify tags were updated
+            // Verify tags were updated and other fields unchanged
             var getTarget = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
 
@@ -3496,63 +3207,37 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
                 var updatedVersion = response.readEntity(PromptVersion.class);
-                assertThat(updatedVersion.tags()).isEqualTo(newTags);
-                assertThat(updatedVersion.id()).isEqualTo(createdVersion.id()); // Same version ID
-                assertThat(updatedVersion.template()).isEqualTo(createdVersion.template()); // Template unchanged
+                assertThat(assertion.apply(updatedVersion)).isTrue();
+                assertThat(updatedVersion.id()).isEqualTo(createdVersion.id());
+                assertThat(updatedVersion.template()).isEqualTo(originalTemplate);
+                assertThat(updatedVersion.metadata()).isEqualTo(originalMetadata);
+                assertThat(updatedVersion.commit()).isEqualTo(originalCommit);
             }
         }
 
-        @Test
-        @DisplayName("Success: clear all tags by setting empty set")
-        void clearAllTags() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
+        Stream<Arguments> updateSingleVersionTags() {
+            return Stream.of(
+                    // Replace tags
+                    arguments(
+                            Set.of("initial", "test"),
+                            Set.of("updated", "production", "stable"),
+                            false,
+                            (Function<PromptVersion, Boolean>) v -> v.tags()
+                                    .equals(Set.of("updated", "production", "stable"))),
 
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+                    // Clear tags with empty set
+                    arguments(
+                            Set.of("tag1", "tag2", "tag3"),
+                            Set.of(),
+                            false,
+                            (Function<PromptVersion, Boolean>) v -> v.tags().isEmpty()),
 
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .tags(Set.of("tag1", "tag2", "tag3"))
-                    .build();
-
-            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
-                    TEST_WORKSPACE);
-
-            // Clear tags using batch endpoint
-            var updateRequest = Map.of(
-                    "ids", Set.of(createdVersion.id()),
-                    "update", Map.of("tags", Set.of()),
-                    "merge_tags", false);
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
-
-            // Verify tags were cleared
-            var getTarget = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
-
-            try (var response = getTarget.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var updatedVersion = response.readEntity(PromptVersion.class);
-                assertThat(updatedVersion.tags()).isEmpty();
-            }
+                    // Clear tags with null
+                    arguments(
+                            Set.of("test", "example"),
+                            null,
+                            false,
+                            (Function<PromptVersion, Boolean>) v -> v.tags() == null || v.tags().isEmpty()));
         }
 
         @Test
@@ -3575,131 +3260,10 @@ class PromptResourceTest {
             }
         }
 
-        @Test
-        @DisplayName("Success: update tags with null tags clears all tags")
-        void updateTagsWithNullTags() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .tags(Set.of("test", "example"))
-                    .build();
-
-            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
-                    TEST_WORKSPACE);
-
-            // Update with null tags (clears all tags)
-            var update = new java.util.HashMap<String, Object>();
-            update.put("tags", null);
-
-            var updateRequest = Map.of(
-                    "ids", Set.of(createdVersion.id()),
-                    "update", update,
-                    "merge_tags", false);
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
-
-            // Verify tags were cleared
-            var getTarget = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
-
-            try (var response = getTarget.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var updatedVersion = response.readEntity(PromptVersion.class);
-                assertThat(updatedVersion.tags()).isNullOrEmpty();
-            }
-        }
-
-        @Test
-        @DisplayName("Success: tags update does not change other version fields")
-        void tagsUpdateDoesNotChangeOtherFields() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .tags(Set.of("original"))
-                    .build();
-
-            var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
-                    TEST_WORKSPACE);
-
-            // Store original values
-            var originalTemplate = createdVersion.template();
-            var originalMetadata = createdVersion.metadata();
-            var originalCommit = createdVersion.commit();
-            var originalCreatedAt = createdVersion.createdAt();
-            var originalCreatedBy = createdVersion.createdBy();
-
-            // Update only tags using batch endpoint
-            var newTags = Set.of("new", "tags");
-            var updateRequest = Map.of(
-                    "ids", Set.of(createdVersion.id()),
-                    "update", Map.of("tags", newTags),
-                    "merge_tags", false);
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(updateRequest, MediaType.APPLICATION_JSON))) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
-
-            // Verify only tags changed, everything else stayed the same
-            var getTarget = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion.id()));
-
-            try (var response = getTarget.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var updatedVersion = response.readEntity(PromptVersion.class);
-                assertThat(updatedVersion.tags()).isEqualTo(newTags);
-                assertThat(updatedVersion.template()).isEqualTo(originalTemplate);
-                assertThat(updatedVersion.metadata()).isEqualTo(originalMetadata);
-                assertThat(updatedVersion.commit()).isEqualTo(originalCommit);
-                assertThat(updatedVersion.createdAt()).isEqualTo(originalCreatedAt);
-                assertThat(updatedVersion.createdBy()).isEqualTo(originalCreatedBy);
-            }
-        }
-
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success: batch update prompt version tags")
-        void batchUpdatePromptVersionTags() {
+        void batchUpdatePromptVersionTags(boolean mergeTags, Function<List<PromptVersion>, Boolean> assertion) {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -3713,31 +3277,38 @@ class PromptResourceTest {
             // Create multiple versions
             var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
-                    .tags(Set.of("old-tag1"))
+                    .tags(mergeTags ? Set.of("existing-tag1") : Set.of("old-tag1"))
                     .build();
 
             var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
-                    .tags(Set.of("old-tag2"))
+                    .tags(mergeTags ? Set.of("existing-tag2") : Set.of("old-tag2"))
                     .build();
 
-            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .tags(Set.of("old-tag3"))
-                    .build();
+            var version3 = mergeTags
+                    ? null
+                    : factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .promptId(promptId)
+                            .tags(Set.of("old-tag3"))
+                            .build();
 
             var createdVersion1 = createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY,
                     TEST_WORKSPACE);
             var createdVersion2 = createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY,
                     TEST_WORKSPACE);
-            var createdVersion3 = createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY,
-                    TEST_WORKSPACE);
+            var createdVersion3 = version3 != null
+                    ? createPromptVersion(new CreatePromptVersion(prompt.name(), version3), API_KEY, TEST_WORKSPACE)
+                    : null;
 
-            // Batch update tags (replace mode)
+            // Batch update tags
+            var ids = createdVersion3 != null
+                    ? Set.of(createdVersion1.id(), createdVersion2.id(), createdVersion3.id())
+                    : Set.of(createdVersion1.id(), createdVersion2.id());
+
             var batchUpdate = Map.of(
-                    "ids", Set.of(createdVersion1.id(), createdVersion2.id(), createdVersion3.id()),
+                    "ids", ids,
                     "update", Map.of("tags", Set.of("new-tag")),
-                    "merge_tags", false);
+                    "merge_tags", mergeTags);
 
             var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
@@ -3754,86 +3325,6 @@ class PromptResourceTest {
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion1.id()));
             var getTarget2 = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion2.id()));
-            var getTarget3 = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion3.id()));
-
-            try (var response1 = getTarget1.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
-                    var response2 = getTarget2.request()
-                            .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                            .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                            .get();
-                    var response3 = getTarget3.request()
-                            .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                            .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                            .get()) {
-
-                assertThat(response1.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(response2.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(response3.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                var updatedVersion1 = response1.readEntity(PromptVersion.class);
-                var updatedVersion2 = response2.readEntity(PromptVersion.class);
-                var updatedVersion3 = response3.readEntity(PromptVersion.class);
-
-                assertThat(updatedVersion1.tags()).containsExactly("new-tag");
-                assertThat(updatedVersion2.tags()).containsExactly("new-tag");
-                assertThat(updatedVersion3.tags()).containsExactly("new-tag");
-            }
-        }
-
-        @Test
-        @DisplayName("Success: batch update prompt version tags with merge")
-        void batchUpdatePromptVersionTagsWithMerge() {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .latestVersion(null)
-                    .build();
-
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            // Create multiple versions
-            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .tags(Set.of("existing-tag1"))
-                    .build();
-
-            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .promptId(promptId)
-                    .tags(Set.of("existing-tag2"))
-                    .build();
-
-            var createdVersion1 = createPromptVersion(new CreatePromptVersion(prompt.name(), version1), API_KEY,
-                    TEST_WORKSPACE);
-            var createdVersion2 = createPromptVersion(new CreatePromptVersion(prompt.name(), version2), API_KEY,
-                    TEST_WORKSPACE);
-
-            // Batch update tags (merge mode)
-            var batchUpdate = Map.of(
-                    "ids", Set.of(createdVersion1.id(), createdVersion2.id()),
-                    "update", Map.of("tags", Set.of("new-tag")),
-                    "merge_tags", true);
-
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
-
-            // Verify tags were merged
-            var getTarget1 = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion1.id()));
-            var getTarget2 = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(createdVersion2.id()));
 
             try (var response1 = getTarget1.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3850,16 +3341,49 @@ class PromptResourceTest {
                 var updatedVersion1 = response1.readEntity(PromptVersion.class);
                 var updatedVersion2 = response2.readEntity(PromptVersion.class);
 
-                assertThat(updatedVersion1.tags()).containsExactlyInAnyOrder("existing-tag1", "new-tag");
-                assertThat(updatedVersion2.tags()).containsExactlyInAnyOrder("existing-tag2", "new-tag");
+                var versions = createdVersion3 != null
+                        ? List.of(updatedVersion1, updatedVersion2, getVersionById(createdVersion3.id()))
+                        : List.of(updatedVersion1, updatedVersion2);
+
+                assertThat(assertion.apply(versions)).isTrue();
             }
         }
 
-        @Test
-        @DisplayName("Error: batch update with empty IDs returns 422")
-        void batchUpdateWithEmptyIds() {
+        Stream<Arguments> batchUpdatePromptVersionTags() {
+            return Stream.of(
+                    // Replace mode
+                    arguments(
+                            false,
+                            (Function<List<PromptVersion>, Boolean>) versions -> versions.stream()
+                                    .allMatch(v -> v.tags().equals(Set.of("new-tag")))),
+
+                    // Merge mode
+                    arguments(
+                            true,
+                            (Function<List<PromptVersion>, Boolean>) versions -> versions.get(0).tags()
+                                    .containsAll(Set.of("existing-tag1", "new-tag"))
+                                    && versions.get(1).tags().containsAll(Set.of("existing-tag2", "new-tag"))));
+        }
+
+        private PromptVersion getVersionById(UUID versionId) {
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(versionId));
+
+            try (var response = target.request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                return response.readEntity(PromptVersion.class);
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Error: batch update with invalid request")
+        void batchUpdateWithInvalidRequest(Set<UUID> ids, int expectedStatus) {
             var batchUpdate = Map.of(
-                    "ids", Set.of(),
+                    "ids", ids,
                     "update", Map.of("tags", Set.of("test")),
                     "merge_tags", false);
 
@@ -3870,27 +3394,17 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
             }
         }
 
-        @Test
-        @DisplayName("Error: batch update with non-existent IDs returns 404")
-        void batchUpdateWithNonExistentIds() {
-            var batchUpdate = Map.of(
-                    "ids", Set.of(UUID.randomUUID(), UUID.randomUUID()),
-                    "update", Map.of("tags", Set.of("test")),
-                    "merge_tags", false);
+        Stream<Arguments> batchUpdateWithInvalidRequest() {
+            return Stream.of(
+                    // Empty IDs returns 422
+                    arguments(Set.of(), HttpStatus.SC_UNPROCESSABLE_ENTITY),
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
-
-            try (var response = target.request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON))) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
+                    // Non-existent IDs returns 404
+                    arguments(Set.of(UUID.randomUUID(), UUID.randomUUID()), HttpStatus.SC_NOT_FOUND));
         }
     }
 }
