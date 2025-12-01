@@ -73,9 +73,18 @@ public interface PromptService {
 
     PromptVersion getVersionById(UUID id);
 
-    void updateVersionTags(UUID versionId, Set<String> tags);
-
-    void batchUpdateVersionTags(Set<UUID> versionIds, Set<String> tags, boolean mergeTags);
+    /**
+     * Update one or more prompt versions.
+     *
+     * <p><strong>Immutability Note:</strong> Prompt versions are immutable by design. Only organizational
+     * metadata (currently tags) can be updated. Core properties like template and metadata cannot be modified
+     * after creation to ensure version history integrity.</p>
+     *
+     * @param versionIds Set of version IDs to update (1-1000 versions)
+     * @param tags Tags to set or merge
+     * @param mergeTags If true, merge with existing tags; if false, replace all tags
+     */
+    void updateVersions(Set<UUID> versionIds, Set<String> tags, boolean mergeTags);
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
@@ -561,33 +570,9 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public void updateVersionTags(@NonNull UUID versionId, Set<String> tags) {
+    public void updateVersions(@NonNull Set<UUID> versionIds, Set<String> tags, boolean mergeTags) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Updating tags for prompt version '{}' in workspace '{}'", versionId, workspaceId);
-
-        transactionTemplate.inTransaction(WRITE, handle -> {
-            var promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-            // Verify version exists in this workspace
-            var existingVersions = promptVersionDAO.findByIds(List.of(versionId), workspaceId);
-            if (existingVersions.isEmpty()) {
-                throw new NotFoundException("Prompt version not found");
-            }
-
-            int updated = promptVersionDAO.updateTags(versionId, tags, workspaceId);
-            if (updated == 0) {
-                throw new NotFoundException("Prompt version not found");
-            }
-
-            log.info("Successfully updated tags for prompt version '{}' in workspace '{}'", versionId, workspaceId);
-            return null;
-        });
-    }
-
-    @Override
-    public void batchUpdateVersionTags(@NonNull Set<UUID> versionIds, Set<String> tags, boolean mergeTags) {
-        var workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Batch updating tags for '{}' prompt versions in workspace '{}'", versionIds.size(), workspaceId);
+        log.info("Updating '{}' prompt version(s) in workspace '{}'", versionIds.size(), workspaceId);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             var promptVersionDAO = handle.attach(PromptVersionDAO.class);
@@ -617,7 +602,7 @@ class PromptServiceImpl implements PromptService {
                 promptVersionDAO.updateTags(versionId, updatedTags, workspaceId);
             }
 
-            log.info("Successfully batch updated tags for '{}' prompt versions in workspace '{}'",
+            log.info("Successfully updated '{}' prompt version(s) in workspace '{}'",
                     existingVersions.size(), workspaceId);
             return null;
         });

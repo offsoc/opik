@@ -2,18 +2,26 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
-type UsePromptVersionBatchUpdateMutationParams = {
+type UsePromptVersionsUpdateMutationParams = {
   versionIds: string[];
   tags: string[];
   mergeTags: boolean;
 };
 
-const batchUpdatePromptVersions = async ({
+/**
+ * Hook for updating one or more prompt versions.
+ *
+ * Note: Prompt versions are immutable by design. Only organizational metadata (tags)
+ * can be updated. Core properties like template and metadata cannot be modified after creation.
+ *
+ * Supports updating 1-1000 versions in a single request.
+ */
+const updatePromptVersions = async ({
   versionIds,
   tags,
   mergeTags,
-}: UsePromptVersionBatchUpdateMutationParams) => {
-  await api.patch(`${PROMPTS_REST_ENDPOINT}versions/batch`, {
+}: UsePromptVersionsUpdateMutationParams) => {
+  await api.patch(`${PROMPTS_REST_ENDPOINT}versions`, {
     ids: versionIds,
     update: {
       tags,
@@ -22,12 +30,12 @@ const batchUpdatePromptVersions = async ({
   });
 };
 
-export default function usePromptVersionBatchUpdateMutation() {
+export default function usePromptVersionsUpdateMutation() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: batchUpdatePromptVersions,
+    mutationFn: updatePromptVersions,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
       queryClient.invalidateQueries({ queryKey: ["prompt-version"] });
@@ -36,7 +44,7 @@ export default function usePromptVersionBatchUpdateMutation() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        description: error.message || "Failed to update tags",
+        description: error.message || "Failed to update prompt versions",
       });
     },
   });

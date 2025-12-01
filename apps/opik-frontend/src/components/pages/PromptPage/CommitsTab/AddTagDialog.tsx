@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import usePromptVersionBatchUpdateMutation from "@/api/prompts/usePromptVersionBatchUpdateMutation";
+import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
 
 type AddTagDialogProps = {
   rows: Array<PromptVersion>;
@@ -27,7 +27,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const [newTag, setNewTag] = useState<string>("");
-  const batchUpdateMutation = usePromptVersionBatchUpdateMutation();
+  const updateMutation = usePromptVersionsUpdateMutation();
 
   const handleClose = () => {
     setOpen(false);
@@ -39,7 +39,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 
     const versionIds = rows.map((row) => row.id);
 
-    batchUpdateMutation.mutate(
+    updateMutation.mutate(
       {
         versionIds,
         tags: [newTag],

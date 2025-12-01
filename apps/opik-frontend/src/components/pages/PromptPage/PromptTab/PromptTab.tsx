@@ -22,7 +22,7 @@ import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageM
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
-import useUpdatePromptVersionTagsMutation from "@/api/prompts/useUpdatePromptVersionTagsMutation";
+import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -40,7 +40,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const editPromptResetKeyRef = useRef(0);
-  const updateTagsMutation = useUpdatePromptVersionTagsMutation();
+  const updateVersionsMutation = usePromptVersionsUpdateMutation();
 
   const { data } = usePromptVersionsById(
     {
@@ -187,9 +187,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               onAddTag={(newTag) => {
                 if (!activeVersion?.id) return;
                 const updatedTags = [...(activeVersion.tags || []), newTag];
-                updateTagsMutation.mutate({
-                  versionId: activeVersion.id,
+                updateVersionsMutation.mutate({
+                  versionIds: [activeVersion.id],
                   tags: updatedTags,
+                  mergeTags: false,
                 });
               }}
               onDeleteTag={(tagToDelete) => {
@@ -197,9 +198,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 const updatedTags = (activeVersion.tags || []).filter(
                   (t) => t !== tagToDelete,
                 );
-                updateTagsMutation.mutate({
-                  versionId: activeVersion.id,
+                updateVersionsMutation.mutate({
+                  versionIds: [activeVersion.id],
                   tags: updatedTags,
+                  mergeTags: false,
                 });
               }}
               align="start"

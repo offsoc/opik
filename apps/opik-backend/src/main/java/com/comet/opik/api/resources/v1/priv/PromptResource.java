@@ -9,7 +9,6 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionRetrieve;
-import com.comet.opik.api.UpdatePromptVersionTags;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.PromptFilter;
@@ -268,48 +267,30 @@ public class PromptResource {
     }
 
     @PATCH
-    @Path("/versions/{versionId}/tags")
-    @Operation(operationId = "updatePromptVersionTags", summary = "Update prompt version tags", description = "Update tags for a prompt version without creating a new version", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content - Tags updated successfully"),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-    })
-    public Response updatePromptVersionTags(
-            @PathParam("versionId") UUID versionId,
-            @Valid UpdatePromptVersionTags request) {
-
-        var workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Updating tags for prompt version '{}' on workspace_id '{}'", versionId, workspaceId);
-
-        promptService.updateVersionTags(versionId, request.tags());
-
-        log.info("Updated tags for prompt version '{}' on workspace_id '{}'", versionId, workspaceId);
-
-        return Response.noContent().build();
-    }
-
-    @PATCH
-    @Path("/versions/batch")
-    @Operation(operationId = "batchUpdatePromptVersions", summary = "Batch update prompt versions", description = "Update multiple prompt versions", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
-    })
+    @Path("/versions")
+    @Operation(operationId = "updatePromptVersions", summary = "Update prompt versions", description = "Update one or more prompt versions. "
+            +
+            "Note: Prompt versions are immutable by design - only organizational metadata (tags) can be updated. " +
+            "Core properties like template and metadata cannot be modified after creation. " +
+            "Supports updating 1-1000 versions in a single request.", responses = {
+                    @ApiResponse(responseCode = "204", description = "No Content - Versions updated successfully"),
+                    @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request payload or validation error", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "404", description = "Not Found - One or more versions not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+            })
     @RateLimited
-    public Response batchUpdatePromptVersions(
-            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionBatchUpdate.class))) @Valid @NotNull PromptVersionBatchUpdate batchUpdate) {
+    public Response updatePromptVersions(
+            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionBatchUpdate.class))) @Valid @NotNull PromptVersionBatchUpdate request) {
 
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Batch updating '{}' prompt versions on workspace_id '{}'", batchUpdate.ids().size(), workspaceId);
+        log.info("Updating '{}' prompt version(s) on workspace_id '{}'", request.ids().size(), workspaceId);
 
-        promptService.batchUpdateVersionTags(
-                batchUpdate.ids(),
-                batchUpdate.update().tags(),
-                Boolean.TRUE.equals(batchUpdate.mergeTags()));
+        promptService.updateVersions(
+                request.ids(),
+                request.update().tags(),
+                Boolean.TRUE.equals(request.mergeTags()));
 
-        log.info("Batch updated '{}' prompt versions on workspace_id '{}'", batchUpdate.ids().size(), workspaceId);
+        log.info("Successfully updated '{}' prompt version(s) on workspace_id '{}'", request.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }

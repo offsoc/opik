@@ -3467,12 +3467,14 @@ class PromptResourceTest {
             var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
                     TEST_WORKSPACE);
 
-            // Update tags
+            // Update tags using batch endpoint
             var newTags = Set.of("updated", "production", "stable");
-            var updateRequest = Map.of("tags", newTags);
+            var updateRequest = Map.of(
+                    "ids", Set.of(createdVersion.id()),
+                    "update", Map.of("tags", newTags),
+                    "merge_tags", false);
 
-            var target = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3521,11 +3523,13 @@ class PromptResourceTest {
             var createdVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), version), API_KEY,
                     TEST_WORKSPACE);
 
-            // Clear tags
-            var updateRequest = Map.of("tags", Set.of());
+            // Clear tags using batch endpoint
+            var updateRequest = Map.of(
+                    "ids", Set.of(createdVersion.id()),
+                    "update", Map.of("tags", Set.of()),
+                    "merge_tags", false);
 
-            var target = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3555,9 +3559,12 @@ class PromptResourceTest {
         @DisplayName("Error: update tags on non-existent version returns 404")
         void updateTagsOnNonExistentVersion() {
             var nonExistentId = UUID.randomUUID();
-            var updateRequest = Map.of("tags", Set.of("test"));
+            var updateRequest = Map.of(
+                    "ids", Set.of(nonExistentId),
+                    "update", Map.of("tags", Set.of("test")),
+                    "merge_tags", false);
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(nonExistentId));
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3590,10 +3597,12 @@ class PromptResourceTest {
                     TEST_WORKSPACE);
 
             // Try to update with null tags (invalid)
-            var updateRequest = Map.of("tags", (Object) null);
+            var updateRequest = Map.of(
+                    "ids", Set.of(createdVersion.id()),
+                    "update", Map.of("tags", (Object) null),
+                    "merge_tags", false);
 
-            var target = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3632,12 +3641,14 @@ class PromptResourceTest {
             var originalCreatedAt = createdVersion.createdAt();
             var originalCreatedBy = createdVersion.createdBy();
 
-            // Update only tags
+            // Update only tags using batch endpoint
             var newTags = Set.of("new", "tags");
-            var updateRequest = Map.of("tags", newTags);
+            var updateRequest = Map.of(
+                    "ids", Set.of(createdVersion.id()),
+                    "update", Map.of("tags", newTags),
+                    "merge_tags", false);
 
-            var target = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s/tags".formatted(createdVersion.id()));
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3710,7 +3721,7 @@ class PromptResourceTest {
                     "update", Map.of("tags", Set.of("new-tag")),
                     "merge_tags", false);
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3790,7 +3801,7 @@ class PromptResourceTest {
                     "update", Map.of("tags", Set.of("new-tag")),
                     "merge_tags", true);
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3834,7 +3845,7 @@ class PromptResourceTest {
                     "update", Map.of("tags", Set.of("test")),
                     "merge_tags", false);
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -3853,7 +3864,7 @@ class PromptResourceTest {
                     "update", Map.of("tags", Set.of("test")),
                     "merge_tags", false);
 
-            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/batch");
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions");
 
             try (var response = target.request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
