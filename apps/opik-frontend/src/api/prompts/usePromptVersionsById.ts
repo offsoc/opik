@@ -8,7 +8,6 @@ import { processFilters } from "@/lib/filters";
 
 type UsePromptVersionsByIdParams = {
   promptId: string;
-  commit?: string;
   page: number;
   size: number;
   sorting?: Sorting;
@@ -29,7 +28,6 @@ const getPromptVersionsById = async (
     promptId,
     size,
     page,
-    commit,
     sorting,
     filters,
   }: UsePromptVersionsByIdParams,
@@ -41,7 +39,6 @@ const getPromptVersionsById = async (
       params: {
         ...processFilters(filters),
         ...processSorting(sorting),
-        ...(commit && { commit }),
         size,
         page,
       },

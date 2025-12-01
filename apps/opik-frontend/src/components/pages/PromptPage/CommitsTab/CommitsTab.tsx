@@ -181,14 +181,9 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     updateType: "replaceIn",
   });
 
-  const [commit = "", setCommit] = useQueryParam("commit", StringParam, {
-    updateType: "replaceIn",
-  });
-
   const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
-      commit: commit ?? undefined,
       page: page,
       size: size,
       sorting: sortedColumns,
@@ -272,8 +267,26 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
       >
         <div className="flex items-center gap-2">
           <SearchInput
-            searchText={commit ?? ""}
-            setSearchText={(value) => setCommit(value || null)}
+            searchText={
+              filters.find((f: Filter) => f.field === "commit")?.value ?? ""
+            }
+            setSearchText={(value) => {
+              if (value) {
+                // Add or update commit filter with 'contains' operator
+                const newFilters = filters.filter(
+                  (f: Filter) => f.field !== "commit",
+                );
+                newFilters.push({
+                  field: "commit",
+                  operator: "contains",
+                  value,
+                });
+                setFilters(newFilters);
+              } else {
+                // Remove commit filter
+                setFilters(filters.filter((f: Filter) => f.field !== "commit"));
+              }
+            }}
             placeholder="Search by commit"
             className="w-[320px]"
             dimension="sm"
